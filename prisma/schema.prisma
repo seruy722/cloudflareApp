@@ -1,0 +1,192 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x"]
+}
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model User {
+  id           String      @id @unique
+  email        String      @unique
+  username     String?
+  role         Role?       @relation(fields: [roleId], references: [id])
+  roleId       Int?        @db.UnsignedInt
+  auth_session Session[]
+  key          Key[]
+  transfers    Transfers[]
+
+  @@index([roleId])
+  @@map("users")
+}
+
+model Session {
+  id             String   @id @unique
+  active_expires BigInt
+  idle_expires   BigInt
+  createdAt      DateTime @default(now())
+  user_id        String
+  user           User     @relation(references: [id], fields: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("sessions")
+}
+
+model Key {
+  id              String  @id @unique
+  hashed_password String?
+  user_id         String
+  user            User    @relation(references: [id], fields: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("keys")
+}
+
+model Role {
+  id          Int               @id @default(autoincrement()) @db.UnsignedInt
+  name        String
+  permissions RolePermissions[]
+  user        User[]
+
+  @@map("roles")
+}
+
+model RolePermissions {
+  role         Role       @relation(fields: [roleId], references: [id])
+  roleId       Int        @db.UnsignedInt
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  permissionId Int        @db.UnsignedInt
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Permission {
+  id       Int               @id @default(autoincrement()) @db.UnsignedInt
+  action   String
+  object   Object            @relation(fields: [objectId], references: [id])
+  objectId Int               @db.UnsignedInt
+  roles    RolePermissions[]
+
+  @@index([objectId])
+  @@map("permissions")
+}
+
+model Object {
+  id         Int          @id @default(autoincrement()) @db.UnsignedInt
+  name       String
+  permission Permission[]
+
+  @@map("objects")
+}
+
+enum Sex {
+  man
+  woman
+}
+
+model ClientPhones {
+  id       Int    @id @default(autoincrement()) @db.UnsignedInt
+  phone    String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId Int    @db.UnsignedInt
+
+  @@index([clientId])
+  @@map("client_phones")
+}
+
+model ClientCity {
+  id     Int      @id @default(autoincrement()) @db.UnsignedInt
+  title  String
+  client Client[]
+
+  @@map("client_cities")
+}
+
+model Client {
+  id   Int    @id @default(autoincrement()) @db.UnsignedInt
+  name String
+  sex  Sex?
+
+  city   ClientCity @relation(fields: [cityId], references: [id])
+  cityId Int        @db.UnsignedInt
+
+  createdAt    DateTime       @default(now())
+  clientPhones ClientPhones[]
+  codes        ClientOnCode[]
+
+  @@map("clients")
+}
+
+model ClientOnCode {
+  code     ClientCode @relation(fields: [codeId], references: [id])
+  codeId   Int        @db.UnsignedInt
+  client   Client     @relation(fields: [clientId], references: [id])
+  clientId Int        @db.UnsignedInt
+
+  @@id([codeId, clientId])
+  @@map("client_on_code")
+}
+
+model ClientCode {
+  id        Int            @id @default(autoincrement()) @db.UnsignedInt
+  code      String
+  clients   ClientOnCode[]
+  createdAt DateTime       @default(now())
+  transfers Transfers[]
+
+  @@map("client_codes")
+}
+
+enum TransferMethod {
+  money
+  moneyProduct
+}
+
+enum TransferStatus {
+  notIssued
+  issued
+  cancel
+  return
+  question
+}
+
+model TransferRecipient {
+  id        Int         @id @default(autoincrement()) @db.UnsignedInt
+  name      String      @unique
+  phone     String
+  createdAt DateTime    @default(now())
+  Transfers Transfers[]
+
+  @@map("transfer_recipients")
+}
+
+model Transfers {
+  id         Int            @id @default(autoincrement()) @db.UnsignedInt
+  sum        Float          @default(0) @db.Float
+  commission Float          @default(1) @db.Float
+  paid       Boolean        @default(false)
+  method     TransferMethod
+  status     TransferStatus @default(notIssued)
+  dateIssued DateTime?
+  notation   String?
+  createdAt  DateTime       @default(now())
+
+  clientCode   ClientCode @relation(fields: [clientCodeId], references: [id], onDelete: Cascade)
+  clientCodeId Int        @db.UnsignedInt
+
+  recipient           TransferRecipient @relation(fields: [transferRecipientId], references: [id])
+  transferRecipientId Int               @db.UnsignedInt
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@index([userId, clientCodeId])
+  @@map("transfers")
+}
